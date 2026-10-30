@@ -17,7 +17,8 @@ pub struct Detection {
     pub version: Option<String>,
 }
 
-const UNIT_DIRS: &[&str] = &["/etc/systemd/system", "/run/systemd/system", "/lib/systemd/system", "/usr/lib/systemd/system"];
+const UNIT_DIRS: &[&str] =
+    &["/etc/systemd/system", "/run/systemd/system", "/lib/systemd/system", "/usr/lib/systemd/system"];
 
 /// Returns evidence string if the rule matches.
 pub async fn eval_rule(rule: &DetectRule) -> Option<String> {
@@ -76,14 +77,15 @@ pub async fn detect(m: &Manifest) -> Detection {
     d.detected = any_ok && all_ok;
     if d.detected
         && let Some(v) = &m.version
-            && let Ok(argv) = exec::prepare(&v.command, false, false) {
-                let out = exec::run(argv, DETECT_TIMEOUT).await;
-                // Many tools print versions on stderr and some exit non-zero for --version.
-                let text = format!("{}\n{}", out.stdout, out.stderr);
-                if let Ok(re) = Regex::new(&v.regex) {
-                    d.version = re.captures(&text).and_then(|c| c.get(1)).map(|m| m.as_str().trim().to_string());
-                }
-            }
+        && let Ok(argv) = exec::prepare(&v.command, false, false)
+    {
+        let out = exec::run(argv, DETECT_TIMEOUT).await;
+        // Many tools print versions on stderr and some exit non-zero for --version.
+        let text = format!("{}\n{}", out.stdout, out.stderr);
+        if let Ok(re) = Regex::new(&v.regex) {
+            d.version = re.captures(&text).and_then(|c| c.get(1)).map(|m| m.as_str().trim().to_string());
+        }
+    }
     d
 }
 
@@ -125,7 +127,11 @@ mod tests {
         assert!(eval_rule(&r).await.is_some());
         let r = DetectRule { path: Some("/nonexistent/x".into()), ..Default::default() };
         assert!(eval_rule(&r).await.is_none());
-        let r = DetectRule { command: Some(vec!["echo".into(), "hello 1.2".into()]), regex: Some(r"hello \d".into()), ..Default::default() };
+        let r = DetectRule {
+            command: Some(vec!["echo".into(), "hello 1.2".into()]),
+            regex: Some(r"hello \d".into()),
+            ..Default::default()
+        };
         assert!(eval_rule(&r).await.is_some());
     }
 

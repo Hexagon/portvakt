@@ -3,7 +3,7 @@
 //! The config file contains password hashes and TOTP secrets, so it must not be
 //! readable by other users. `Config::load` refuses files with unsafe permissions.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::os::unix::fs::PermissionsExt;
@@ -157,8 +157,7 @@ impl Default for TerminalConfig {
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
         check_private_file(path)?;
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("reading config {}", path.display()))?;
+        let text = std::fs::read_to_string(path).with_context(|| format!("reading config {}", path.display()))?;
         let cfg: Config = toml::from_str(&text).context("parsing config")?;
         cfg.validate()?;
         Ok(cfg)
@@ -195,9 +194,10 @@ impl Config {
             bail!("server.behind_proxy requires server.trusted_proxies");
         }
         if let Some(o) = &s.public_origin
-            && (o.ends_with('/') || !(o.starts_with("https://") || o.starts_with("http://"))) {
-                bail!("server.public_origin must look like https://host[:port] (no trailing slash)");
-            }
+            && (o.ends_with('/') || !(o.starts_with("https://") || o.starts_with("http://")))
+        {
+            bail!("server.public_origin must look like https://host[:port] (no trailing slash)");
+        }
         if !self.terminal.shell.is_absolute() {
             bail!("terminal.shell must be an absolute path");
         }
@@ -232,17 +232,18 @@ pub fn check_private_file(path: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Atomically write a 0600 file. When replacing an existing file, its owner is kept
+/// (so `sudo portvakt user add` doesn't lock out a service running as another user).
 pub fn write_private(path: &Path, data: &[u8]) -> Result<()> {
     use std::io::Write;
-    use std::os::unix::fs::OpenOptionsExt;
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let owner = std::fs::metadata(path).ok().map(|m| (m.uid(), m.gid()));
     let tmp = path.with_extension("tmp");
     {
-        let mut f = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&tmp)?;
+        let mut f = std::fs::OpenOptions::new().write(true).create(true).truncate(true).mode(0o600).open(&tmp)?;
+        if let (Some((uid, gid)), true) = (owner, crate::exec::is_root()) {
+            std::os::unix::fs::fchown(&f, Some(uid), Some(gid))?;
+        }
         f.write_all(data)?;
         f.sync_all()?;
     }

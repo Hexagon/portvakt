@@ -6,8 +6,8 @@
 //! plugin; it may declare views without `command`) plus Rust hooks. Register it in `all()`.
 
 use super::manifest::Manifest;
-use anyhow::{anyhow, bail, Result};
-use serde_json::{json, Value};
+use anyhow::{Result, anyhow, bail};
+use serde_json::{Value, json};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -67,8 +67,10 @@ impl NativePlugin for System {
         let mut rows = Vec::new();
         rows.push(("Hostname".into(), read("/proc/sys/kernel/hostname").trim().to_string()));
         rows.push(("Kernel".into(), read("/proc/sys/kernel/osrelease").trim().to_string()));
-        if let Some(name) =
-            read("/etc/os-release").lines().find_map(|l| l.strip_prefix("PRETTY_NAME=")).map(|s| s.trim_matches('"').to_string())
+        if let Some(name) = read("/etc/os-release")
+            .lines()
+            .find_map(|l| l.strip_prefix("PRETTY_NAME="))
+            .map(|s| s.trim_matches('"').to_string())
         {
             rows.push(("OS".into(), name));
         }
@@ -83,7 +85,10 @@ impl NativePlugin for System {
         rows.push(("CPUs".into(), std::thread::available_parallelism().map(|n| n.to_string()).unwrap_or_default()));
         let mem = read("/proc/meminfo");
         if let (Some(total), Some(avail)) = (meminfo_kb(&mem, "MemTotal:"), meminfo_kb(&mem, "MemAvailable:")) {
-            rows.push(("Memory".into(), format!("{} used of {}", human(total.saturating_sub(avail) * 1024), human(total * 1024))));
+            rows.push((
+                "Memory".into(),
+                format!("{} used of {}", human(total.saturating_sub(avail) * 1024), human(total * 1024)),
+            ));
         }
         for mount in ["/", "/var", "/home", "/srv"] {
             if mount != "/" && !is_mountpoint(mount) {
@@ -148,7 +153,13 @@ fn proc_stat(pid: i32) -> Option<ProcStat> {
     let f: Vec<&str> = rest.split_whitespace().collect();
     // f[0] = field 3 (state); utime=14, stime=15, threads=20, starttime=22, rss=24.
     let n = |i: usize| f.get(i - 3).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
-    Some(ProcStat { state: f.first()?.to_string(), ticks: n(14) + n(15), start: n(22), rss_pages: n(24), threads: n(20) })
+    Some(ProcStat {
+        state: f.first()?.to_string(),
+        ticks: n(14) + n(15),
+        start: n(22),
+        rss_pages: n(24),
+        threads: n(20),
+    })
 }
 
 fn users() -> HashMap<u32, String> {
@@ -245,7 +256,9 @@ impl NativePlugin for Processes {
             "kill" => libc::SIGKILL,
             _ => bail!("unknown action"),
         };
-        let pid = row["pid"].as_i64().filter(|p| *p > 1 && *p < i32::MAX as i64).ok_or_else(|| anyhow!("invalid pid"))? as i32;
+        let pid =
+            row["pid"].as_i64().filter(|p| *p > 1 && *p < i32::MAX as i64).ok_or_else(|| anyhow!("invalid pid"))?
+                as i32;
         if pid == std::process::id() as i32 {
             bail!("refusing to signal portvakt itself");
         }
@@ -313,7 +326,10 @@ fn counters() -> Counters {
         }
         let name = f[2];
         // Whole disks only (partitions would double count).
-        if name.starts_with("loop") || name.starts_with("ram") || !std::path::Path::new(&format!("/sys/block/{name}")).exists() {
+        if name.starts_with("loop")
+            || name.starts_with("ram")
+            || !std::path::Path::new(&format!("/sys/block/{name}")).exists()
+        {
             continue;
         }
         c.disk_read += f[5].parse::<u64>().unwrap_or(0) * 512;
@@ -437,7 +453,8 @@ mod tests {
         let mut child = std::process::Command::new("sleep").arg("30").spawn().unwrap();
         let cpid = child.id() as i64;
         let data = p.view_data("processes").unwrap();
-        let mut row = data["rows"].as_array().unwrap().iter().find(|r| r["pid"].as_i64() == Some(cpid)).unwrap().clone();
+        let mut row =
+            data["rows"].as_array().unwrap().iter().find(|r| r["pid"].as_i64() == Some(cpid)).unwrap().clone();
         let real_start = row["start"].clone();
         row["start"] = json!(1);
         assert!(p.view_action("processes", "terminate", &row).unwrap_err().to_string().contains("different process"));

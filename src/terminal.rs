@@ -10,13 +10,13 @@
 //! The upgrade request is authenticated by cookie + Origin (in `Authed`), and the
 //! first message must carry the session's CSRF token.
 
-use crate::web::{err, Admin, Shared};
-use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use crate::web::{Admin, Shared, err};
 use axum::extract::State;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::Response;
 use futures_util::{SinkExt, StreamExt};
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde::Deserialize;
 use std::io::{Read, Write};
 use std::sync::atomic::Ordering;

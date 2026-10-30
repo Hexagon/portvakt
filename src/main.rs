@@ -6,7 +6,7 @@ mod plugins;
 mod terminal;
 mod web;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use config::{Config, Role, User};
 use std::io::{BufRead, IsTerminal};
@@ -86,10 +86,16 @@ enum UserCmd {
         password_stdin: bool,
     },
     /// Enable or rotate TOTP for a user.
-    Totp { name: String },
+    Totp {
+        name: String,
+    },
     /// Disable TOTP for a user.
-    NoTotp { name: String },
-    Remove { name: String },
+    NoTotp {
+        name: String,
+    },
+    Remove {
+        name: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -255,7 +261,12 @@ fn init(
     }
     let pw = read_password(password_stdin)?;
     let secret = totp.then(auth::generate_totp_secret);
-    cfg.users.push(User { name: admin.into(), password_hash: auth::hash_password(&pw)?, role: Role::Admin, totp_secret: secret.clone() });
+    cfg.users.push(User {
+        name: admin.into(),
+        password_hash: auth::hash_password(&pw)?,
+        role: Role::Admin,
+        totp_secret: secret.clone(),
+    });
     cfg.validate()?;
     cfg.save(path)?;
     println!("Wrote {}", path.display());
@@ -273,7 +284,12 @@ fn user_cmd(path: &Path, c: UserCmd) -> Result<()> {
     match c {
         UserCmd::List => {
             for u in &cfg.users {
-                println!("{:<24} {:<7} totp={}", u.name, format!("{:?}", u.role).to_lowercase(), u.totp_secret.is_some());
+                println!(
+                    "{:<24} {:<7} totp={}",
+                    u.name,
+                    format!("{:?}", u.role).to_lowercase(),
+                    u.totp_secret.is_some()
+                );
             }
             return Ok(());
         }
@@ -330,7 +346,9 @@ async fn plugin_cmd(path: &Path, c: PluginCmd) -> Result<()> {
         PluginCmd::Validate { files, detect } => {
             let mut failed = false;
             for f in &files {
-                let res = std::fs::read_to_string(f).map_err(anyhow::Error::from).and_then(|t| plugins::manifest::Manifest::parse(&t));
+                let res = std::fs::read_to_string(f)
+                    .map_err(anyhow::Error::from)
+                    .and_then(|t| plugins::manifest::Manifest::parse(&t));
                 match res {
                     Ok(m) => {
                         let stem = f.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
@@ -420,14 +438,25 @@ async fn scaffold(program: &str, id: Option<String>) -> Result<()> {
         detect.push(format!("{{ binary = {} }}", q(program)));
     }
     let unit = names.iter().map(|n| format!("{n}.service")).find(|u| {
-        ["/etc/systemd/system", "/lib/systemd/system", "/usr/lib/systemd/system"].iter().any(|d| Path::new(d).join(u).exists())
+        ["/etc/systemd/system", "/lib/systemd/system", "/usr/lib/systemd/system"]
+            .iter()
+            .any(|d| Path::new(d).join(u).exists())
     });
     if let Some(u) = &unit {
         detect.push(format!("{{ systemd_unit = {} }}", q(u)));
     }
     let mut conf_files = Vec::new();
     for n in &names {
-        for pat in [format!("/etc/{n}/{n}.conf"), format!("/etc/{n}.conf"), format!("/etc/{n}/*.conf"), format!("/etc/{n}/conf.d/*.conf"), format!("/etc/{n}/*.yaml"), format!("/etc/{n}/*.yml"), format!("/etc/{n}/*.toml"), format!("/etc/{n}/*.json")] {
+        for pat in [
+            format!("/etc/{n}/{n}.conf"),
+            format!("/etc/{n}.conf"),
+            format!("/etc/{n}/*.conf"),
+            format!("/etc/{n}/conf.d/*.conf"),
+            format!("/etc/{n}/*.yaml"),
+            format!("/etc/{n}/*.yml"),
+            format!("/etc/{n}/*.toml"),
+            format!("/etc/{n}/*.json"),
+        ] {
             if plugins::detect::first_glob_match(&pat).is_some() && !conf_files.contains(&pat) {
                 conf_files.push(pat);
             }
@@ -441,7 +470,8 @@ async fn scaffold(program: &str, id: Option<String>) -> Result<()> {
     if bin.is_some() {
         let re = regex::Regex::new(r"(\d+\.\d+(?:\.\d+)?[\w.+-]*)").unwrap();
         for flag in ["--version", "-v", "-V", "version"] {
-            let argv = exec::prepare(&[program.to_string(), flag.to_string()], false, false).map_err(anyhow::Error::msg)?;
+            let argv =
+                exec::prepare(&[program.to_string(), flag.to_string()], false, false).map_err(anyhow::Error::msg)?;
             let out = exec::run(argv, std::time::Duration::from_secs(3)).await;
             let text = out.combined();
             if let Some(m) = re.find(&text) {
@@ -458,7 +488,9 @@ async fn scaffold(program: &str, id: Option<String>) -> Result<()> {
         .collect();
 
     if detect.is_empty() {
-        bail!("nothing found for {program:?} on this host (no binary, unit or /etc dir). Install it first or write the manifest by hand.");
+        bail!(
+            "nothing found for {program:?} on this host (no binary, unit or /etc dir). Install it first or write the manifest by hand."
+        );
     }
     println!("# Draft generated by `portvakt plugin new {program}`. REVIEW EVERYTHING (docs/PLUGINS.md),");
     println!("# then: portvakt plugin validate --detect {id}.toml");
@@ -467,13 +499,24 @@ async fn scaffold(program: &str, id: Option<String>) -> Result<()> {
     println!("[detect]\nany = [{}]\n", detect.join(", "));
     if let Some((flag, line)) = version {
         println!("# `{program} {flag}` printed: {line}");
-        println!("[version]\ncommand = [{}, {}]\nregex = '(\\d+\\.\\d+(?:\\.\\d+)?)'  # TODO: tighten, e.g. '{program} v(\\S+)'\n", q(program), q(flag));
+        println!(
+            "[version]\ncommand = [{}, {}]\nregex = '(\\d+\\.\\d+(?:\\.\\d+)?)'  # TODO: tighten, e.g. '{program} v(\\S+)'\n",
+            q(program),
+            q(flag)
+        );
     }
     if let Some(u) = &unit {
-        println!("[service]\nsystemd = {}\nactions = [\"start\", \"stop\", \"restart\"]  # add \"reload\" if the unit supports it\n", q(u));
+        println!(
+            "[service]\nsystemd = {}\nactions = [\"start\", \"stop\", \"restart\"]  # add \"reload\" if the unit supports it\n",
+            q(u)
+        );
     }
     for f in &conf_files {
-        println!("[[files]]\npath = {}\n# validate = [{}, \"TODO-config-test-flag\"]  # strongly recommended\n# validate_privileged = true\n# after_save = \"restart\"\n", q(f), q(program));
+        println!(
+            "[[files]]\npath = {}\n# validate = [{}, \"TODO-config-test-flag\"]  # strongly recommended\n# validate_privileged = true\n# after_save = \"restart\"\n",
+            q(f),
+            q(program)
+        );
     }
     for l in &logs {
         println!("[[logs]]\nlabel = \"Log\"\npath = {}\n", q(l));
@@ -490,9 +533,7 @@ async fn scaffold(program: &str, id: Option<String>) -> Result<()> {
 // ---------------------------------------------------------------------------
 
 fn sudoers_escape(arg: &str) -> String {
-    arg.chars()
-        .flat_map(|c| if ",:=\\ ".contains(c) { vec!['\\', c] } else { vec![c] })
-        .collect()
+    arg.chars().flat_map(|c| if ",:=\\ ".contains(c) { vec!['\\', c] } else { vec![c] }).collect()
 }
 
 async fn sudoers(path: &Path, user: &str, all: bool) -> Result<()> {
@@ -529,7 +570,10 @@ async fn sudoers(path: &Path, user: &str, all: bool) -> Result<()> {
         }
         for l in &m.logs {
             if let Some(u) = &l.journal {
-                cmds.push((["journalctl", "-u", u, "-n", "500", "--no-pager", "-o", "short-iso"].map(String::from).to_vec(), false));
+                cmds.push((
+                    ["journalctl", "-u", u, "-n", "500", "--no-pager", "-o", "short-iso"].map(String::from).to_vec(),
+                    false,
+                ));
             }
         }
         if cmds.is_empty() {

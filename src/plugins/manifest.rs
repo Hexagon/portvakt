@@ -4,7 +4,7 @@
 //! keep the two in sync. `Manifest::validate` is the single source of truth for
 //! what a valid plugin is and is used by both the server and `portvakt plugin validate`.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -283,9 +283,7 @@ fn placeholder_re() -> Regex {
 /// Placeholders used in an argv.
 pub fn placeholders(argv: &[String]) -> Vec<String> {
     let re = placeholder_re();
-    argv.iter()
-        .flat_map(|a| re.captures_iter(a).map(|c| c[1].to_string()).collect::<Vec<_>>())
-        .collect()
+    argv.iter().flat_map(|a| re.captures_iter(a).map(|c| c[1].to_string()).collect::<Vec<_>>()).collect()
 }
 
 /// Compile a param pattern so it must match the whole value.
@@ -346,20 +344,23 @@ impl DetectRule {
             bail!("detect rule: `regex` only applies to `command`");
         }
         if let Some(b) = &self.binary
-            && (b.is_empty() || (b.contains('/') && !b.starts_with('/'))) {
-                bail!("detect binary must be a bare name or absolute path: {b:?}");
-            }
+            && (b.is_empty() || (b.contains('/') && !b.starts_with('/')))
+        {
+            bail!("detect binary must be a bare name or absolute path: {b:?}");
+        }
         if let Some(p) = &self.path {
             check_path("detect path", p)?;
         }
         if let Some(u) = &self.systemd_unit
-            && !unit_re().is_match(u) {
-                bail!("detect systemd_unit looks invalid: {u:?}");
-            }
+            && !unit_re().is_match(u)
+        {
+            bail!("detect systemd_unit looks invalid: {u:?}");
+        }
         if let Some(p) = &self.process
-            && (p.is_empty() || p.len() > 15 || p.contains('/')) {
-                bail!("detect process must be a comm name (max 15 chars): {p:?}");
-            }
+            && (p.is_empty() || p.len() > 15 || p.contains('/'))
+        {
+            bail!("detect process must be a comm name (max 15 chars): {p:?}");
+        }
         if let Some(c) = &self.command {
             check_argv("detect command", c, &HashSet::new())?;
         }
@@ -450,9 +451,10 @@ impl Manifest {
                 }
                 let re = anchored(&p.pattern)?;
                 if let Some(d) = &p.default
-                    && !re.is_match(d) {
-                        bail!("action {:?}: default for {:?} does not match its pattern", a.id, p.name);
-                    }
+                    && !re.is_match(d)
+                {
+                    bail!("action {:?}: default for {:?} does not match its pattern", a.id, p.name);
+                }
             }
             check_argv(&format!("action {:?}", a.id), &a.command, &names)?;
         }

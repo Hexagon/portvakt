@@ -1,10 +1,10 @@
 //! Executing plugin capabilities: actions, service control, info probes,
 //! file read/write (with backup, validation and rollback) and logs.
 
-use super::manifest::{Action, Column, FileSpec, Manifest, TableFormat, View, ViewKind, ViewLocation};
 use super::Plugin;
+use super::manifest::{Action, Column, FileSpec, Manifest, TableFormat, View, ViewKind, ViewLocation};
 use crate::exec::{self, Output};
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{Context, Result, anyhow, bail};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -98,7 +98,11 @@ pub fn actions(m: &Manifest) -> Vec<ActionView> {
 pub fn render_argv(action: &Action, values: &HashMap<String, String>) -> Result<Vec<String>> {
     let mut resolved = HashMap::new();
     for p in &action.params {
-        let v = values.get(&p.name).cloned().or_else(|| p.default.clone()).ok_or_else(|| anyhow!("missing parameter {:?}", p.label))?;
+        let v = values
+            .get(&p.name)
+            .cloned()
+            .or_else(|| p.default.clone())
+            .ok_or_else(|| anyhow!("missing parameter {:?}", p.label))?;
         if !super::manifest::anchored(&p.pattern)?.is_match(&v) {
             bail!("parameter {:?} does not match the allowed pattern {}", p.label, p.pattern);
         }
@@ -142,8 +146,14 @@ pub struct ServiceStatus {
 pub async fn service_status(m: &Manifest) -> Option<ServiceStatus> {
     let unit = m.service.as_ref()?.systemd.clone();
     let argv = exec::prepare(
-        &["systemctl", "show", &unit, "--no-pager", "--property=ActiveState,SubState,UnitFileState,MainPID,Description"]
-            .map(String::from),
+        &[
+            "systemctl",
+            "show",
+            &unit,
+            "--no-pager",
+            "--property=ActiveState,SubState,UnitFileState,MainPID,Description",
+        ]
+        .map(String::from),
         false,
         false,
     )
@@ -176,7 +186,9 @@ pub async fn info(p: &Plugin, pol: ExecPolicy) -> Vec<(String, String)> {
                 match &probe.regex {
                     Some(r) => regex::Regex::new(r)
                         .ok()
-                        .and_then(|re| re.captures(&text).map(|c| c.get(1).unwrap_or(c.get(0).unwrap()).as_str().to_string()))
+                        .and_then(|re| {
+                            re.captures(&text).map(|c| c.get(1).unwrap_or(c.get(0).unwrap()).as_str().to_string())
+                        })
                         .unwrap_or_else(|| "—".into()),
                     None => {
                         let t: String = text.trim().lines().take(20).collect::<Vec<_>>().join("\n");
@@ -331,7 +343,8 @@ pub async fn write_file(
     if let Some(v) = &spec.validate {
         let mut vals = HashMap::new();
         vals.insert("file".to_string(), real.display().to_string());
-        let argv = exec::prepare(&substitute(v, &vals), spec.validate_privileged, pol.use_sudo).map_err(|e| anyhow!(e))?;
+        let argv =
+            exec::prepare(&substitute(v, &vals), spec.validate_privileged, pol.use_sudo).map_err(|e| anyhow!(e))?;
         let out = exec::run(argv, Duration::from_secs(60)).await;
         if !out.success() {
             atomic_replace(&real, &old).context("RESTORE FAILED after validation error")?;
@@ -343,7 +356,12 @@ pub async fn write_file(
         Some(id) => Some(run_action(m, id, &HashMap::new(), pol).await?),
         None => None,
     };
-    Ok(SaveResult { sha256: sha256_hex(content.as_bytes()), backup: backup.display().to_string(), validation, after_save })
+    Ok(SaveResult {
+        sha256: sha256_hex(content.as_bytes()),
+        backup: backup.display().to_string(),
+        validation,
+        after_save,
+    })
 }
 
 fn backup(dir: &Path, plugin: &str, real: &Path, data: &[u8]) -> Result<PathBuf> {
@@ -352,12 +370,14 @@ fn backup(dir: &Path, plugin: &str, real: &Path, data: &[u8]) -> Result<PathBuf>
     std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).ok();
     let name = real.display().to_string().trim_start_matches('/').replace('/', "__");
     let file = d.join(format!("{name}.{}", crate::auth::unix_now()));
-    let mut f = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&file)
-        .or_else(|_| {
-            // Same-second save: add a random suffix.
-            std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600)
-                .open(file.with_extension(crate::auth::random_token(4)))
-        })?;
+    let mut f = std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&file).or_else(|_| {
+        // Same-second save: add a random suffix.
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(file.with_extension(crate::auth::random_token(4)))
+    })?;
     f.write_all(data)?;
     f.sync_all()?;
     Ok(file)
@@ -430,7 +450,11 @@ pub fn views(m: &Manifest) -> Vec<ViewView> {
                     let a = m.actions.iter().find(|a| a.id == ra.action);
                     RowActionView {
                         action: ra.action.clone(),
-                        label: ra.label.clone().or_else(|| a.map(|a| a.label.clone())).unwrap_or_else(|| ra.action.clone()),
+                        label: ra
+                            .label
+                            .clone()
+                            .or_else(|| a.map(|a| a.label.clone()))
+                            .unwrap_or_else(|| ra.action.clone()),
                         danger: ra.danger,
                         // Native row actions always confirm; declarative follow the action.
                         confirm: a.map(|a| a.confirm).unwrap_or(true) || ra.danger,
@@ -482,7 +506,11 @@ pub fn parse_table(v: &View, text: &str) -> Result<Vec<serde_json::Value>> {
                 let parts: Vec<&str> = l.split_whitespace().collect();
                 let mut obj = serde_json::Map::new();
                 for (i, c) in v.columns.iter().enumerate() {
-                    let val = if i + 1 == n { parts.get(i..).map(|r| r.join(" ")).unwrap_or_default() } else { parts.get(i).unwrap_or(&"").to_string() };
+                    let val = if i + 1 == n {
+                        parts.get(i..).map(|r| r.join(" ")).unwrap_or_default()
+                    } else {
+                        parts.get(i).unwrap_or(&"").to_string()
+                    };
                     obj.insert(c.key.clone(), Value::String(val));
                 }
                 Value::Object(obj)
@@ -494,7 +522,13 @@ pub fn parse_table(v: &View, text: &str) -> Result<Vec<serde_json::Value>> {
 
 /// Run a row action. For declarative views the row's fields are mapped to the action's
 /// params and go through the normal param validation.
-pub async fn view_action(p: &Plugin, view_id: &str, action: &str, row: &serde_json::Value, pol: ExecPolicy) -> Result<String> {
+pub async fn view_action(
+    p: &Plugin,
+    view_id: &str,
+    action: &str,
+    row: &serde_json::Value,
+    pol: ExecPolicy,
+) -> Result<String> {
     let v = view(&p.manifest, view_id)?.clone();
     let ra = v.row_actions.iter().find(|r| r.action == action).ok_or_else(|| anyhow!("unknown row action"))?;
     if v.command.is_none() {
@@ -652,7 +686,10 @@ mod tests {
         assert!(read_file(&m, "/etc/shadow").is_err());
 
         // Stale hash → conflict.
-        assert!(matches!(write_file(&m, &path, "ok v2\n", "deadbeef", backups.path(), pol).await, Err(SaveError::Conflict)));
+        assert!(matches!(
+            write_file(&m, &path, "ok v2\n", "deadbeef", backups.path(), pol).await,
+            Err(SaveError::Conflict)
+        ));
         // Valid save.
         let r = write_file(&m, &path, "ok v2\n", &f.sha256, backups.path(), pol).await.ok().unwrap();
         assert_eq!(std::fs::read_to_string(&conf).unwrap(), "ok v2\n");

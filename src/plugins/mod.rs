@@ -10,7 +10,7 @@ pub mod manifest;
 pub mod native;
 pub mod runtime;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use detect::Detection;
 use manifest::Manifest;
 use rust_embed::RustEmbed;
@@ -54,7 +54,10 @@ pub fn load_all(dirs: &[PathBuf], disabled: &[String]) -> Result<(Vec<Plugin>, V
     for n in native::all() {
         match native::parse(n.as_ref()) {
             Ok(m) => {
-                map.insert(m.id.clone(), Plugin { manifest: Arc::new(m), source: Source::Native, native: Some(Arc::from(n)) });
+                map.insert(
+                    m.id.clone(),
+                    Plugin { manifest: Arc::new(m), source: Source::Native, native: Some(Arc::from(n)) },
+                );
             }
             Err(e) => errors.push(format!("native plugin: {e:#}")),
         }
@@ -99,7 +102,10 @@ pub fn load_all(dirs: &[PathBuf], disabled: &[String]) -> Result<(Vec<Plugin>, V
                         errors.push(format!("{}: cannot override native plugin {:?}", path.display(), m.id));
                         continue;
                     }
-                    map.insert(m.id.clone(), Plugin { manifest: Arc::new(m), source: Source::File(path), native: None });
+                    map.insert(
+                        m.id.clone(),
+                        Plugin { manifest: Arc::new(m), source: Source::File(path), native: None },
+                    );
                 }
                 Err(e) => errors.push(format!("{}: {e:#}", path.display())),
             }

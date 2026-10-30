@@ -10,7 +10,7 @@
 //!   via timing.
 
 use crate::config::{Config, Role, User};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use hmac::{Hmac, KeyInit, Mac};
 use rand::RngExt;
@@ -25,15 +25,11 @@ pub const SESSION_COOKIE_PLAIN: &str = "portvakt";
 pub const CSRF_HEADER: &str = "x-portvakt-csrf";
 
 pub fn valid_username(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 64
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
+    !name.is_empty() && name.len() <= 64 && name.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
 }
 
 pub fn hash_password(password: &str) -> Result<String> {
-    let hash = Argon2::default()
-        .hash_password(password.as_bytes())
-        .map_err(|e| anyhow!("hashing failed: {e}"))?;
+    let hash = Argon2::default().hash_password(password.as_bytes()).map_err(|e| anyhow!("hashing failed: {e}"))?;
     Ok(hash.to_string())
 }
 
@@ -67,8 +63,8 @@ fn hotp(key: &[u8], counter: u64) -> u32 {
     mac.update(&counter.to_be_bytes());
     let digest = mac.finalize().into_bytes();
     let offset = (digest[19] & 0x0f) as usize;
-    let bin = u32::from_be_bytes([digest[offset], digest[offset + 1], digest[offset + 2], digest[offset + 3]])
-        & 0x7fff_ffff;
+    let bin =
+        u32::from_be_bytes([digest[offset], digest[offset + 1], digest[offset + 2], digest[offset + 3]]) & 0x7fff_ffff;
     bin % 1_000_000
 }
 
@@ -191,13 +187,8 @@ impl Auth {
         self.failures.lock().unwrap().remove(&keys[1]);
         let token = random_token(32);
         let now = Instant::now();
-        let session = Session {
-            user: user.name.clone(),
-            role: user.role,
-            csrf: random_token(32),
-            created: now,
-            last_seen: now,
-        };
+        let session =
+            Session { user: user.name.clone(), role: user.role, csrf: random_token(32), created: now, last_seen: now };
         self.sessions.lock().unwrap().insert(token_key(&token), session.clone());
         Ok((token, session))
     }

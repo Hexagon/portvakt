@@ -6,18 +6,18 @@ use crate::config::{Config, Role};
 use crate::plugins::runtime::{self, ExecPolicy, SaveError};
 use crate::plugins::{Registry, Source};
 use axum::extract::{ConnectInfo, DefaultBodyLimit, FromRef, FromRequestParts, Path, Query, State};
-use axum::http::{header, request::Parts, HeaderMap, HeaderValue, Method, StatusCode, Uri};
+use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, Uri, header, request::Parts};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use rust_embed::RustEmbed;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
-use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 
 #[derive(RustEmbed)]
 #[folder = "web/"]
@@ -176,15 +176,15 @@ where
             .map(|c| c.0)
             .unwrap_or_else(|| SocketAddr::from(([0, 0, 0, 0], 0)));
         let ip = client_ip(&st.cfg, peer, &parts.headers);
-        let token = session_token(&st.cfg, &parts.headers).ok_or_else(|| err(StatusCode::UNAUTHORIZED, "not logged in"))?;
+        let token =
+            session_token(&st.cfg, &parts.headers).ok_or_else(|| err(StatusCode::UNAUTHORIZED, "not logged in"))?;
         let session = st.auth.session(&token).ok_or_else(|| err(StatusCode::UNAUTHORIZED, "session expired"))?;
         let safe = matches!(parts.method, Method::GET | Method::HEAD);
         let is_ws = parts.headers.get(header::UPGRADE).is_some();
-        if (!safe || is_ws)
-            && !origin_ok(&st.cfg, &parts.headers) {
-                st.audit.log(&session.user, ip, "csrf.origin", parts.uri.path(), false);
-                return Err(err(StatusCode::FORBIDDEN, "bad origin"));
-            }
+        if (!safe || is_ws) && !origin_ok(&st.cfg, &parts.headers) {
+            st.audit.log(&session.user, ip, "csrf.origin", parts.uri.path(), false);
+            return Err(err(StatusCode::FORBIDDEN, "bad origin"));
+        }
         if !safe {
             let sent = parts.headers.get(auth::CSRF_HEADER).and_then(|v| v.to_str().ok()).unwrap_or("");
             if !bool::from(subtle::ConstantTimeEq::ct_eq(sent.as_bytes(), session.csrf.as_bytes())) {
@@ -253,7 +253,8 @@ async fn login(
             res
         }
         Ok(Err(LoginError::TotpRequired)) => {
-            (StatusCode::UNAUTHORIZED, Json(json!({"error": "TOTP code required", "totp_required": true}))).into_response()
+            (StatusCode::UNAUTHORIZED, Json(json!({"error": "TOTP code required", "totp_required": true})))
+                .into_response()
         }
         Ok(Err(LoginError::RateLimited)) => {
             st.audit.log(&req.username, ip, "login.ratelimited", "", false);
@@ -390,7 +391,12 @@ struct PathQuery {
     path: String,
 }
 
-async fn read_file(State(st): State<Shared>, Admin(a): Admin, Path(id): Path<String>, Query(q): Query<PathQuery>) -> Response {
+async fn read_file(
+    State(st): State<Shared>,
+    Admin(a): Admin,
+    Path(id): Path<String>,
+    Query(q): Query<PathQuery>,
+) -> Response {
     let p = match managed(&st, &id).await {
         Ok(p) => p,
         Err(r) => return r,
@@ -411,7 +417,12 @@ struct WriteReq {
     sha256: String,
 }
 
-async fn write_file(State(st): State<Shared>, Admin(a): Admin, Path(id): Path<String>, Json(req): Json<WriteReq>) -> Response {
+async fn write_file(
+    State(st): State<Shared>,
+    Admin(a): Admin,
+    Path(id): Path<String>,
+    Json(req): Json<WriteReq>,
+) -> Response {
     let p = match managed(&st, &id).await {
         Ok(p) => p,
         Err(r) => return r,
@@ -422,10 +433,15 @@ async fn write_file(State(st): State<Shared>, Admin(a): Admin, Path(id): Path<St
             st.audit.log(&a.session.user, a.ip, "file.write", format!("{} backup={}", req.path, r.backup), true);
             Json(r).into_response()
         }
-        Err(SaveError::Conflict) => err(StatusCode::CONFLICT, "file changed on disk since it was opened; reload it first"),
+        Err(SaveError::Conflict) => {
+            err(StatusCode::CONFLICT, "file changed on disk since it was opened; reload it first")
+        }
         Err(SaveError::Invalid(out)) => {
             st.audit.log(&a.session.user, a.ip, "file.write", format!("{} rejected by validation", req.path), false);
-            (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"error": "validation failed; previous content restored", "validation": out})))
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({"error": "validation failed; previous content restored", "validation": out})),
+            )
                 .into_response()
         }
         Err(SaveError::Other(e)) => {
