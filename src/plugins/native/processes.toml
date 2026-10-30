@@ -1,0 +1,32 @@
+# Native plugin: task manager. Data and signals come from Rust (native.rs, `Processes`)
+# reading /proc directly, so it works the same on every Linux distribution.
+id = "processes"
+name = "Task Manager"
+description = "Running processes with live CPU and memory usage. Terminate or kill processes."
+category = "System"
+icon = "pulse"
+
+[detect]
+any = [{ path = "/proc/self/stat" }]
+
+[[views]]
+id = "processes"
+label = "Processes"
+type = "table"
+refresh = 3
+key = "pid"
+columns = [
+  { key = "pid", label = "PID", format = "number" },
+  { key = "user", label = "User" },
+  { key = "name", label = "Name" },
+  { key = "state", label = "State", format = "status" },
+  { key = "cpu", label = "CPU %", format = "percent" },
+  { key = "mem", label = "Mem %", format = "percent" },
+  { key = "rss", label = "RSS", format = "bytes" },
+  { key = "threads", label = "Threads", format = "number" },
+  { key = "command", label = "Command" },
+]
+row_actions = [
+  { action = "terminate", label = "Terminate (SIGTERM)", danger = true },
+  { action = "kill", label = "Kill (SIGKILL)", danger = true },
+]

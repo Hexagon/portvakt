@@ -35,6 +35,8 @@ pub struct Manifest {
     pub files: Vec<FileSpec>,
     #[serde(default)]
     pub logs: Vec<LogSpec>,
+    #[serde(default)]
+    pub views: Vec<View>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -164,6 +166,89 @@ pub struct LogSpec {
     pub path: Option<String>,
     /// systemd unit whose journal to show.
     pub journal: Option<String>,
+}
+
+/// A custom view rendered by the UI from data (plugins never ship code to the browser).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct View {
+    /// Unique within the plugin.
+    pub id: String,
+    pub label: String,
+    /// "table", "metrics" or "terminal". Only native plugins can provide metrics/terminal.
+    #[serde(rename = "type")]
+    pub kind: ViewKind,
+    /// Where it opens: "editor" (a tab) or "panel" (bottom panel).
+    #[serde(default)]
+    pub location: ViewLocation,
+    /// Auto-refresh interval in seconds; 0 = manual.
+    #[serde(default)]
+    pub refresh: u64,
+    /// Declarative table data source. Omit only in native plugins (Rust provides the data).
+    pub command: Option<Vec<String>>,
+    #[serde(default)]
+    pub privileged: bool,
+    /// How to parse `command` output: "json" (array of objects), "json-lines" (one object
+    /// per line) or "columns" (whitespace separated, keys from `columns`, last column takes the rest).
+    #[serde(default)]
+    pub format: Option<TableFormat>,
+    /// Header lines to skip for format = "columns".
+    #[serde(default)]
+    pub skip_lines: usize,
+    /// Field that uniquely identifies a row (used by row actions).
+    pub key: Option<String>,
+    #[serde(default)]
+    pub columns: Vec<Column>,
+    #[serde(default)]
+    pub row_actions: Vec<RowAction>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ViewKind {
+    Table,
+    Metrics,
+    Terminal,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ViewLocation {
+    #[default]
+    Editor,
+    Panel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TableFormat {
+    Json,
+    JsonLines,
+    Columns,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Column {
+    pub key: String,
+    pub label: String,
+    /// Display hint: "text" (default), "number", "bytes", "percent", "status".
+    #[serde(default)]
+    pub format: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RowAction {
+    /// Id of an action in this plugin (declarative) or a native row action.
+    pub action: String,
+    /// Maps action param name → row field name.
+    #[serde(default)]
+    pub params: std::collections::BTreeMap<String, String>,
+    /// Label override (defaults to the action's label).
+    pub label: Option<String>,
+    #[serde(default)]
+    pub danger: bool,
 }
 
 fn default_category() -> String {
@@ -387,6 +472,46 @@ impl Manifest {
             }
             if f.readonly && (f.validate.is_some() || f.after_save.is_some()) {
                 bail!("file {:?}: readonly files cannot have validate/after_save", f.path);
+            }
+        }
+        let mut view_ids = HashSet::new();
+        for v in &self.views {
+            if !id_re().is_match(&v.id) || !view_ids.insert(v.id.clone()) {
+                bail!("view id {:?} invalid or duplicate", v.id);
+            }
+            if v.kind != ViewKind::Table && v.command.is_some() {
+                bail!("view {:?}: only table views can have a command", v.id);
+            }
+            if let Some(c) = &v.command {
+                check_argv(&format!("view {:?}", v.id), c, &HashSet::new())?;
+                let Some(fmt) = v.format else { bail!("view {:?}: `format` is required with `command`", v.id) };
+                if fmt == TableFormat::Columns && v.columns.is_empty() {
+                    bail!("view {:?}: format \"columns\" needs `columns`", v.id);
+                }
+            }
+            if v.refresh > 0 && v.refresh < 2 {
+                bail!("view {:?}: refresh must be 0 or >= 2 seconds", v.id);
+            }
+            for ra in &v.row_actions {
+                if v.key.is_none() {
+                    bail!("view {:?}: row_actions need `key`", v.id);
+                }
+                // Declarative views must reference a real action and supply every param.
+                if v.command.is_some() {
+                    let Some(a) = self.actions.iter().find(|a| a.id == ra.action) else {
+                        bail!("view {:?}: row action {:?} is not an action of this plugin", v.id, ra.action);
+                    };
+                    for p in &a.params {
+                        if !ra.params.contains_key(&p.name) && p.default.is_none() {
+                            bail!("view {:?}: row action {:?} does not map param {:?}", v.id, ra.action, p.name);
+                        }
+                    }
+                    for k in ra.params.keys() {
+                        if !a.params.iter().any(|p| &p.name == k) {
+                            bail!("view {:?}: row action {:?} maps unknown param {k:?}", v.id, ra.action);
+                        }
+                    }
+                }
             }
         }
         for l in &self.logs {

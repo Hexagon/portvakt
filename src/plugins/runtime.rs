@@ -1,7 +1,7 @@
 //! Executing plugin capabilities: actions, service control, info probes,
 //! file read/write (with backup, validation and rollback) and logs.
 
-use super::manifest::{Action, FileSpec, Manifest};
+use super::manifest::{Action, Column, FileSpec, Manifest, TableFormat, View, ViewKind, ViewLocation};
 use super::Plugin;
 use crate::exec::{self, Output};
 use anyhow::{anyhow, bail, Context, Result};
@@ -386,6 +386,137 @@ fn atomic_replace(real: &Path, data: &[u8]) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// Views
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct ViewView {
+    pub id: String,
+    pub label: String,
+    #[serde(rename = "type")]
+    pub kind: ViewKind,
+    pub location: ViewLocation,
+    pub refresh: u64,
+    pub key: Option<String>,
+    pub columns: Vec<Column>,
+    pub row_actions: Vec<RowActionView>,
+}
+
+#[derive(Serialize)]
+pub struct RowActionView {
+    pub action: String,
+    pub label: String,
+    pub danger: bool,
+    pub confirm: bool,
+}
+
+pub fn views(m: &Manifest) -> Vec<ViewView> {
+    m.views
+        .iter()
+        .map(|v| ViewView {
+            id: v.id.clone(),
+            label: v.label.clone(),
+            kind: v.kind,
+            location: v.location,
+            refresh: v.refresh,
+            key: v.key.clone(),
+            columns: v.columns.clone(),
+            row_actions: v
+                .row_actions
+                .iter()
+                .map(|ra| {
+                    let a = m.actions.iter().find(|a| a.id == ra.action);
+                    RowActionView {
+                        action: ra.action.clone(),
+                        label: ra.label.clone().or_else(|| a.map(|a| a.label.clone())).unwrap_or_else(|| ra.action.clone()),
+                        danger: ra.danger,
+                        // Native row actions always confirm; declarative follow the action.
+                        confirm: a.map(|a| a.confirm).unwrap_or(true) || ra.danger,
+                    }
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+fn view<'a>(m: &'a Manifest, id: &str) -> Result<&'a View> {
+    m.views.iter().find(|v| v.id == id).ok_or_else(|| anyhow!("unknown view {id:?}"))
+}
+
+pub async fn view_data(p: &Plugin, id: &str, pol: ExecPolicy) -> Result<serde_json::Value> {
+    let v = view(&p.manifest, id)?.clone();
+    let Some(cmd) = &v.command else {
+        let n = p.native.clone().ok_or_else(|| anyhow!("view has no data source"))?;
+        let id = id.to_string();
+        return tokio::task::spawn_blocking(move || n.view_data(&id)).await?;
+    };
+    let argv = exec::prepare(cmd, v.privileged, pol.use_sudo).map_err(|e| anyhow!(e))?;
+    let out = exec::run(argv, Duration::from_secs(30)).await;
+    if !out.success() {
+        bail!("command failed: {}", out.combined().trim());
+    }
+    let rows = parse_table(&v, &out.stdout)?;
+    Ok(serde_json::json!({ "rows": rows }))
+}
+
+pub fn parse_table(v: &View, text: &str) -> Result<Vec<serde_json::Value>> {
+    use serde_json::Value;
+    let rows: Vec<Value> = match v.format.unwrap_or(TableFormat::Json) {
+        TableFormat::Json => match serde_json::from_str::<Value>(text)? {
+            Value::Array(a) => a,
+            _ => bail!("expected a JSON array"),
+        },
+        TableFormat::JsonLines => text
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .map(serde_json::from_str)
+            .collect::<std::result::Result<_, _>>()?,
+        TableFormat::Columns => text
+            .lines()
+            .skip(v.skip_lines)
+            .filter(|l| !l.trim().is_empty())
+            .map(|l| {
+                let n = v.columns.len();
+                let parts: Vec<&str> = l.split_whitespace().collect();
+                let mut obj = serde_json::Map::new();
+                for (i, c) in v.columns.iter().enumerate() {
+                    let val = if i + 1 == n { parts.get(i..).map(|r| r.join(" ")).unwrap_or_default() } else { parts.get(i).unwrap_or(&"").to_string() };
+                    obj.insert(c.key.clone(), Value::String(val));
+                }
+                Value::Object(obj)
+            })
+            .collect(),
+    };
+    Ok(rows.into_iter().filter(|r| r.is_object()).take(5000).collect())
+}
+
+/// Run a row action. For declarative views the row's fields are mapped to the action's
+/// params and go through the normal param validation.
+pub async fn view_action(p: &Plugin, view_id: &str, action: &str, row: &serde_json::Value, pol: ExecPolicy) -> Result<String> {
+    let v = view(&p.manifest, view_id)?.clone();
+    let ra = v.row_actions.iter().find(|r| r.action == action).ok_or_else(|| anyhow!("unknown row action"))?;
+    if v.command.is_none() {
+        let n = p.native.clone().ok_or_else(|| anyhow!("no handler"))?;
+        let (vid, a, r) = (view_id.to_string(), action.to_string(), row.clone());
+        return tokio::task::spawn_blocking(move || n.view_action(&vid, &a, &r)).await?;
+    }
+    let mut params = HashMap::new();
+    for (param, field) in &ra.params {
+        let val = match &row[field] {
+            serde_json::Value::String(s) => s.clone(),
+            serde_json::Value::Number(n) => n.to_string(),
+            _ => bail!("row field {field:?} missing"),
+        };
+        params.insert(param.clone(), val);
+    }
+    let out = run_action(&p.manifest, action, &params, pol).await?;
+    if !out.success() {
+        bail!("{}", out.combined().trim());
+    }
+    Ok(out.combined())
+}
+
+// ---------------------------------------------------------------------------
 // Logs
 // ---------------------------------------------------------------------------
 
@@ -467,6 +598,21 @@ mod tests {
             d = dir.display()
         );
         Manifest::parse(&text).unwrap()
+    }
+
+    #[test]
+    fn table_formats() {
+        let mut v: View = toml::from_str(
+            "id='t'\nlabel='T'\ntype='table'\ncommand=['x']\nformat='columns'\nskip_lines=1\ncolumns=[{key='a',label='A'},{key='rest',label='R'}]",
+        )
+        .unwrap();
+        let rows = parse_table(&v, "HEAD ER\n1 hello world\n\n2 x\n").unwrap();
+        assert_eq!(rows[0]["rest"], "hello world");
+        assert_eq!(rows.len(), 2);
+        v.format = Some(TableFormat::JsonLines);
+        assert_eq!(parse_table(&v, "{\"a\":1}\n{\"a\":2}\n").unwrap().len(), 2);
+        v.format = Some(TableFormat::Json);
+        assert!(parse_table(&v, "{}").is_err());
     }
 
     #[tokio::test]

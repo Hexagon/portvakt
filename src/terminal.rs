@@ -33,8 +33,8 @@ enum ClientMsg {
 }
 
 pub async fn handler(State(st): State<Shared>, Admin(a): Admin, ws: WebSocketUpgrade) -> Response {
-    if !st.cfg.terminal.enabled {
-        return err(StatusCode::FORBIDDEN, "terminal is disabled in the configuration");
+    if !crate::web::terminal_available(&st) {
+        return err(StatusCode::FORBIDDEN, "terminal is disabled");
     }
     if st.terminals.fetch_add(1, Ordering::SeqCst) >= MAX_TERMINALS {
         st.terminals.fetch_sub(1, Ordering::SeqCst);

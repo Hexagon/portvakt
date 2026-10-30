@@ -46,6 +46,8 @@ pub fn router(state: Shared) -> Router {
         .route("/apps/{id}/actions/{action}", post(run_action))
         .route("/apps/{id}/file", get(read_file).put(write_file))
         .route("/apps/{id}/logs/{index}", get(read_log))
+        .route("/apps/{id}/views/{view}", get(view_data))
+        .route("/apps/{id}/views/{view}/actions/{action}", post(view_action))
         .route("/rescan", post(rescan))
         .route("/audit", get(audit_log))
         .route("/terminal", get(crate::terminal::handler))
@@ -271,10 +273,15 @@ fn session_json(st: &AppState, s: &Session) -> Value {
         "user": s.user,
         "role": s.role,
         "csrf": s.csrf,
-        "terminal": st.cfg.terminal.enabled && s.role == Role::Admin,
+        "terminal": terminal_available(st) && s.role == Role::Admin,
         "hostname": std::fs::read_to_string("/proc/sys/kernel/hostname").unwrap_or_default().trim(),
         "version": env!("CARGO_PKG_VERSION"),
     })
+}
+
+/// The terminal is available when enabled in config AND the terminal plugin is loaded.
+pub fn terminal_available(st: &AppState) -> bool {
+    st.cfg.terminal.enabled && st.registry.get("terminal").is_some()
 }
 
 async fn logout(State(st): State<Shared>, a: Authed) -> Response {
@@ -331,6 +338,7 @@ async fn app_detail(State(st): State<Shared>, a: Authed, Path(id): Path<String>)
         "actions": runtime::actions(m),
         "files": if admin { serde_json::to_value(runtime::files(m)).unwrap() } else { json!([]) },
         "logs": if admin { serde_json::to_value(runtime::logs(m)).unwrap() } else { json!([]) },
+        "views": if admin { serde_json::to_value(runtime::views(m)).unwrap() } else { json!([]) },
     }))
     .into_response()
 }
@@ -431,6 +439,45 @@ async fn read_log(State(st): State<Shared>, Admin(_a): Admin, Path((id, index)):
     match runtime::read_log(&p.manifest, index, st.pol).await {
         Ok(text) => Json(json!({ "text": text })).into_response(),
         Err(e) => err(StatusCode::BAD_REQUEST, format!("{e:#}")),
+    }
+}
+
+async fn view_data(State(st): State<Shared>, Admin(_a): Admin, Path((id, view)): Path<(String, String)>) -> Response {
+    let p = match managed(&st, &id).await {
+        Ok(p) => p,
+        Err(r) => return r,
+    };
+    match runtime::view_data(p, &view, st.pol).await {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => err(StatusCode::BAD_REQUEST, format!("{e:#}")),
+    }
+}
+
+#[derive(Deserialize)]
+struct RowReq {
+    row: Value,
+}
+
+async fn view_action(
+    State(st): State<Shared>,
+    Admin(a): Admin,
+    Path((id, view, action)): Path<(String, String, String)>,
+    Json(req): Json<RowReq>,
+) -> Response {
+    let p = match managed(&st, &id).await {
+        Ok(p) => p,
+        Err(r) => return r,
+    };
+    let detail = format!("{id}/{view}/{action} {}", req.row.to_string().chars().take(300).collect::<String>());
+    match runtime::view_action(p, &view, &action, &req.row, st.pol).await {
+        Ok(msg) => {
+            st.audit.log(&a.session.user, a.ip, "view.action", &detail, true);
+            Json(json!({ "message": msg })).into_response()
+        }
+        Err(e) => {
+            st.audit.log(&a.session.user, a.ip, "view.action", format!("{detail}: {e:#}"), false);
+            err(StatusCode::BAD_REQUEST, format!("{e:#}"))
+        }
     }
 }
 

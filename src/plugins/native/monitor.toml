@@ -1,0 +1,15 @@
+# Native plugin: live system metrics, sampled every 2 s with 10 minutes of history.
+id = "monitor"
+name = "System Monitor"
+description = "Live CPU, memory, swap, load, network and disk throughput."
+category = "System"
+icon = "graph"
+
+[detect]
+any = [{ path = "/proc/stat" }]
+
+[[views]]
+id = "monitor"
+label = "Monitor"
+type = "metrics"
+refresh = 2

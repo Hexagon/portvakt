@@ -1,0 +1,16 @@
+# Native plugin: web terminal (PTY over WebSocket, implemented in terminal.rs).
+# Disable with `plugins.disabled = ["terminal"]` or `terminal.enabled = false`.
+id = "terminal"
+name = "Terminal"
+description = "Interactive shell on the server, as the user portvakt runs as."
+category = "System"
+icon = "terminal"
+
+[detect]
+any = [{ binary = "bash" }, { binary = "sh" }]
+
+[[views]]
+id = "shell"
+label = "Terminal"
+type = "terminal"
+location = "panel"

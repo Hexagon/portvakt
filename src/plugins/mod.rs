@@ -68,6 +68,10 @@ pub fn load_all(dirs: &[PathBuf], disabled: &[String]) -> Result<(Vec<Plugin>, V
                     errors.push(format!("builtin {name}: file name must be <id>.toml"));
                     continue;
                 }
+                if let Err(e) = check_declarative(&m) {
+                    errors.push(format!("builtin {name}: {e:#}"));
+                    continue;
+                }
                 map.insert(m.id.clone(), Plugin { manifest: Arc::new(m), source: Source::Builtin, native: None });
             }
             Err(e) => errors.push(format!("builtin {name}: {e:#}")),
@@ -85,7 +89,8 @@ pub fn load_all(dirs: &[PathBuf], disabled: &[String]) -> Result<(Vec<Plugin>, V
         for path in entries {
             let res = check_trusted(&path)
                 .and_then(|_| std::fs::read_to_string(&path).map_err(Into::into))
-                .and_then(|t| Manifest::parse(&t));
+                .and_then(|t| Manifest::parse(&t))
+                .and_then(|m| check_declarative(&m).map(|_| m));
             match res {
                 Ok(m) => {
                     // An external manifest may override a builtin, but not a native plugin's hooks.
@@ -103,6 +108,16 @@ pub fn load_all(dirs: &[PathBuf], disabled: &[String]) -> Result<(Vec<Plugin>, V
     let mut plugins: Vec<Plugin> = map.into_values().filter(|p| !disabled.contains(&p.manifest.id)).collect();
     plugins.sort_by(|a, b| a.manifest.name.to_lowercase().cmp(&b.manifest.name.to_lowercase()));
     Ok((plugins, errors))
+}
+
+/// Rules that only apply to TOML-only plugins (no Rust hooks to provide view data).
+fn check_declarative(m: &Manifest) -> Result<()> {
+    for v in &m.views {
+        if v.kind != manifest::ViewKind::Table || v.command.is_none() {
+            bail!("view {:?}: declarative plugins can only have table views with a `command`", v.id);
+        }
+    }
+    Ok(())
 }
 
 /// A plugin file can make portvakt run arbitrary commands, so it must be as
