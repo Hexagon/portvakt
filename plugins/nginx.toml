@@ -1,0 +1,62 @@
+id = "nginx"
+name = "nginx"
+description = "High-performance HTTP server and reverse proxy."
+category = "Web servers"
+icon = "globe"
+
+[detect]
+any = [{ binary = "nginx" }, { path = "/etc/nginx/nginx.conf" }, { systemd_unit = "nginx.service" }]
+
+[version]
+command = ["nginx", "-v"]
+regex = 'nginx/(\S+)'
+
+[service]
+systemd = "nginx.service"
+actions = ["start", "stop", "restart", "reload"]
+
+[[actions]]
+id = "test-config"
+label = "Test configuration"
+description = "nginx -t: parse and check all configuration files."
+command = ["nginx", "-t"]
+privileged = true
+
+[[actions]]
+id = "dump-config"
+label = "Show effective configuration"
+command = ["nginx", "-T"]
+privileged = true
+
+[[files]]
+path = "/etc/nginx/nginx.conf"
+language = "nginx"
+validate = ["nginx", "-t"]
+validate_privileged = true
+after_save = "reload"
+
+[[files]]
+path = "/etc/nginx/conf.d/*.conf"
+language = "nginx"
+validate = ["nginx", "-t"]
+validate_privileged = true
+after_save = "reload"
+
+[[files]]
+path = "/etc/nginx/sites-available/*"
+language = "nginx"
+validate = ["nginx", "-t"]
+validate_privileged = true
+after_save = "reload"
+
+[[logs]]
+label = "Error log"
+path = "/var/log/nginx/error.log"
+
+[[logs]]
+label = "Access log"
+path = "/var/log/nginx/access.log"
+
+[[logs]]
+label = "Journal"
+journal = "nginx.service"

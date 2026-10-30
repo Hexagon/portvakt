@@ -1,0 +1,40 @@
+# Native plugin manifest for the host itself (Rust hooks in native.rs).
+id = "system"
+name = "System"
+description = "Host overview: OS, load, memory, disks and systemd health."
+category = "System"
+icon = "server"
+
+[detect]
+any = [{ path = "/proc/self" }]
+
+[[info]]
+label = "Failed units"
+command = ["systemctl", "--failed", "--no-legend", "--plain"]
+
+[[actions]]
+id = "failed-units"
+label = "List failed units"
+command = ["systemctl", "--failed", "--no-pager"]
+
+[[actions]]
+id = "top-processes"
+label = "Top processes by memory"
+command = ["ps", "-eo", "pid,user,%cpu,%mem,comm", "--sort=-%mem"]
+
+[[actions]]
+id = "listening-ports"
+label = "Listening ports"
+command = ["ss", "-tulpn"]
+privileged = true
+
+[[files]]
+path = "/etc/hosts"
+language = "hosts"
+readonly = true
+
+[[files]]
+path = "/etc/fstab"
+language = "fstab"
+readonly = true
+

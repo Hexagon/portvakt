@@ -1,0 +1,4 @@
+target/
+/data/
+*.pem
+portvakt.toml
