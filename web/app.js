@@ -483,7 +483,8 @@ async function loadApp(id, el) {
   let d;
   try { d = await api("GET", "/apps/" + encodeURIComponent(id)); } catch (e) { fill(el, h("div", { class: "notice" }, e.message)); return; }
   const admin = state.session.role === "admin";
-  const svc = d.service;
+  // Empty state = systemctl unusable (e.g. container without systemd as PID 1).
+  const svc = d.service?.active ? d.service : null;
   const head = h("div", { class: "page-h" },
     h("div", { class: "big" }, icon(d.icon)),
     h("div", {},
@@ -714,8 +715,17 @@ function poller(fn, seconds) {
   return { stop() { stopped = true; clearTimeout(timer); }, now: () => fn() };
 }
 
+const STATUS_OK = /^(running|active|up|listening|enabled|loaded|healthy|ok|r|s)$/i;
+const STATUS_BAD = /^(failed|exited|dead|error|unhealthy|z|crashed|not-found)$/i;
+
 function cell(col, value) {
   if (value == null) return "";
+  if (col.format === "status") {
+    const v = String(value);
+    const word = v.split(/[\s(]/)[0];
+    const cls = STATUS_OK.test(word) ? "active" : STATUS_BAD.test(word) ? "failed" : "inactive";
+    return h("span", { class: "pill" }, h("span", { class: "dot " + cls }), v);
+  }
   switch (col.format) {
     case "bytes": return fmt.bytes(value);
     case "percent": return Number(value).toFixed(1);
@@ -931,6 +941,11 @@ const terminal = {
       this.fitAddon = new window.FitAddon.FitAddon();
       this.term.loadAddon(this.fitAddon);
       this.term.open(this.el);
+      // Let workbench shortcuts through instead of sending them to the shell.
+      this.term.attachCustomKeyEventHandler((e) => {
+        const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+        return !(e.key === "F1" || (mod && (e.code === "Backquote" || k === "b" || k === "p")) || (e.altKey && k === "w"));
+      });
       this.term.onData((d) => this.send({ type: "input", data: d }));
       this.term.onResize(({ cols, rows }) => this.send({ type: "resize", cols, rows }));
       this.ro = new ResizeObserver(() => this.fit());
