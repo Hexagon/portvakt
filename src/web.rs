@@ -349,6 +349,8 @@ async fn app_detail(State(st): State<Shared>, a: Authed, Path(id): Path<String>)
 }
 
 /// Admin + plugin exists + application is detected. Undetected apps are never acted on.
+// The Err side is a ready-to-send response; boxing it would only add noise to every handler.
+#[allow(clippy::result_large_err)]
 async fn managed<'a>(st: &'a AppState, id: &str) -> Result<&'a crate::plugins::Plugin, Response> {
     let p = st.registry.get(id).ok_or_else(|| err(StatusCode::NOT_FOUND, "unknown app"))?;
     if !st.registry.is_detected(id).await {
