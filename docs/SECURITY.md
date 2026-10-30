@@ -108,6 +108,11 @@ terminal is enabled — open a shell as the user portvakt runs as. So the goals 
    - grant write access to the config files you want editable via group/ACL,
    - the web terminal then is a shell for the unprivileged `portvakt` user.
    Running as root works and is simpler, but then the terminal is a root shell.
+   Know the limits of sudo mode: lines for parameterised actions end in `*`, and
+   sudo's `*` accepts any arguments, so on the sudo side those lines are only as
+   strict as the program itself (portvakt still validates every value before calling
+   sudo). Granting Docker commands is root-equivalent in any setup. Remove lines for
+   plugins you don't need.
 5. **Disable the terminal** if you don't need it: `terminal.enabled = false`
    or `plugins.disabled = ["terminal"]`.
 6. Keep `audit.log` shipped somewhere you can't tamper with from the box.
