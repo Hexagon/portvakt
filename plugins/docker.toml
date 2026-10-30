@@ -1,0 +1,113 @@
+# Docker engine: containers and images as live tables, daemon config with validation.
+id = "docker"
+name = "Docker"
+description = "Container engine: containers, images and daemon configuration."
+category = "Containers"
+icon = "box"
+
+[detect]
+any = [{ binary = "docker" }, { binary = "dockerd" }, { systemd_unit = "docker.service" }]
+
+[version]
+command = ["docker", "--version"]
+regex = 'Docker version ([^,\s]+)'
+
+[service]
+systemd = "docker.service"
+actions = ["start", "stop", "restart"]
+
+[[info]]
+label = "Engine"
+command = ["docker", "info", "--format", "{{.ServerVersion}} · {{.Containers}} containers ({{.ContainersRunning}} running) · {{.Images}} images · storage {{.Driver}}"]
+privileged = true
+
+[[views]]
+id = "containers"
+label = "Containers"
+type = "table"
+refresh = 5
+command = ["docker", "ps", "--all", "--no-trunc", "--format", "{{json .}}"]
+privileged = true
+format = "json-lines"
+key = "ID"
+columns = [
+  { key = "Names", label = "Name" },
+  { key = "Image", label = "Image" },
+  { key = "State", label = "State", format = "status" },
+  { key = "Status", label = "Status" },
+  { key = "Ports", label = "Ports" },
+  { key = "RunningFor", label = "Created" },
+]
+row_actions = [
+  { action = "container-restart", params = { id = "ID" } },
+  { action = "container-stop", params = { id = "ID" }, danger = true },
+  { action = "container-start", params = { id = "ID" } },
+  { action = "container-logs", params = { id = "ID" }, label = "Logs" },
+]
+
+[[views]]
+id = "images"
+label = "Images"
+type = "table"
+command = ["docker", "images", "--format", "{{json .}}"]
+privileged = true
+format = "json-lines"
+key = "ID"
+columns = [
+  { key = "Repository", label = "Repository" },
+  { key = "Tag", label = "Tag" },
+  { key = "ID", label = "Id" },
+  { key = "Size", label = "Size" },
+  { key = "CreatedSince", label = "Created" },
+]
+
+[[actions]]
+id = "container-start"
+label = "Start"
+command = ["docker", "start", "{id}"]
+privileged = true
+params = [{ name = "id", label = "Container id", pattern = '[0-9a-f]{12,64}' }]
+
+[[actions]]
+id = "container-stop"
+label = "Stop"
+command = ["docker", "stop", "{id}"]
+privileged = true
+confirm = true
+timeout = 60
+params = [{ name = "id", label = "Container id", pattern = '[0-9a-f]{12,64}' }]
+
+[[actions]]
+id = "container-restart"
+label = "Restart"
+command = ["docker", "restart", "{id}"]
+privileged = true
+confirm = true
+timeout = 90
+params = [{ name = "id", label = "Container id", pattern = '[0-9a-f]{12,64}' }]
+
+[[actions]]
+id = "container-logs"
+label = "Container logs"
+command = ["docker", "logs", "--tail", "200", "{id}"]
+privileged = true
+params = [{ name = "id", label = "Container id", pattern = '[0-9a-f]{12,64}' }]
+
+[[actions]]
+id = "prune"
+label = "Prune unused data"
+description = "docker system prune: removes stopped containers, unused networks, dangling images and build cache."
+command = ["docker", "system", "prune", "--force"]
+privileged = true
+confirm = true
+timeout = 300
+
+[[files]]
+path = "/etc/docker/daemon.json"
+language = "json"
+validate = ["dockerd", "--validate", "--config-file", "{file}"]
+validate_privileged = true
+
+[[logs]]
+label = "Daemon journal"
+journal = "docker.service"

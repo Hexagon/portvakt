@@ -1,0 +1,77 @@
+# systemd services overview. Shows how a purely declarative plugin builds a table view
+# from command output and wires row actions to validated, parameterised actions.
+id = "systemd"
+name = "Services"
+description = "All systemd services: state, start, stop, restart."
+category = "System"
+icon = "cog"
+
+[detect]
+# /run/systemd/system only exists when systemd is actually PID 1.
+all = [{ binary = "systemctl" }, { path = "/run/systemd/system" }]
+
+[version]
+command = ["systemctl", "--version"]
+regex = 'systemd (\d+)'
+
+[[info]]
+label = "Failed units"
+command = ["systemctl", "--failed", "--no-legend", "--plain", "--no-pager"]
+
+[[views]]
+id = "services"
+label = "Services"
+type = "table"
+refresh = 10
+activity = true
+command = ["systemctl", "list-units", "--type=service", "--all", "--no-legend", "--plain", "--no-pager"]
+format = "columns"
+key = "unit"
+columns = [
+  { key = "unit", label = "Unit" },
+  { key = "load", label = "Load" },
+  { key = "active", label = "Active", format = "status" },
+  { key = "sub", label = "Sub" },
+  { key = "description", label = "Description" },
+]
+row_actions = [
+  { action = "restart-unit", params = { unit = "unit" } },
+  { action = "stop-unit", params = { unit = "unit" }, danger = true },
+  { action = "start-unit", params = { unit = "unit" } },
+]
+
+[[actions]]
+id = "start-unit"
+label = "Start"
+command = ["systemctl", "start", "{unit}"]
+privileged = true
+params = [{ name = "unit", label = "Unit", pattern = '[A-Za-z0-9@._:\-]+\.service' }]
+
+[[actions]]
+id = "stop-unit"
+label = "Stop"
+command = ["systemctl", "stop", "{unit}"]
+privileged = true
+confirm = true
+params = [{ name = "unit", label = "Unit", pattern = '[A-Za-z0-9@._:\-]+\.service' }]
+
+[[actions]]
+id = "restart-unit"
+label = "Restart"
+command = ["systemctl", "restart", "{unit}"]
+privileged = true
+confirm = true
+params = [{ name = "unit", label = "Unit", pattern = '[A-Za-z0-9@._:\-]+\.service' }]
+
+[[actions]]
+id = "unit-status"
+label = "Unit status"
+description = "systemctl status for one unit."
+command = ["systemctl", "status", "--no-pager", "--lines=30", "{unit}"]
+params = [{ name = "unit", label = "Unit", pattern = '[A-Za-z0-9@._:\-]+\.service' }]
+
+[[actions]]
+id = "daemon-reload"
+label = "Reload unit files"
+command = ["systemctl", "daemon-reload"]
+privileged = true

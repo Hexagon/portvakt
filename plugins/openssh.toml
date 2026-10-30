@@ -1,0 +1,59 @@
+# OpenSSH server. Every config save is checked with `sshd -t` and rolled back on error,
+# so a typo cannot lock you out on the next reload.
+id = "openssh"
+name = "OpenSSH server"
+description = "Secure shell daemon. Config changes are validated with sshd -t before reload."
+category = "Security"
+icon = "lock"
+
+[detect]
+any = [{ binary = "sshd" }, { path = "/etc/ssh/sshd_config" }]
+
+[version]
+command = ["ssh", "-V"]
+regex = 'OpenSSH_([^\s,]+)'
+
+[service]
+# Debian/Ubuntu name it ssh.service but ship sshd.service as an alias.
+systemd = "sshd.service"
+actions = ["reload", "restart"]
+
+[[info]]
+label = "Authentication"
+command = ["sshd", "-T"]
+regex = '(?m)^passwordauthentication (\S+)'
+privileged = true
+
+[[actions]]
+id = "test-config"
+label = "Test configuration"
+command = ["sshd", "-t"]
+privileged = true
+
+[[actions]]
+id = "effective-config"
+label = "Show effective configuration"
+command = ["sshd", "-T"]
+privileged = true
+
+[[files]]
+path = "/etc/ssh/sshd_config"
+language = "sshd"
+validate = ["sshd", "-t"]
+validate_privileged = true
+after_save = "reload"
+
+[[files]]
+path = "/etc/ssh/sshd_config.d/*.conf"
+language = "sshd"
+validate = ["sshd", "-t"]
+validate_privileged = true
+after_save = "reload"
+
+[[logs]]
+label = "Journal"
+journal = "sshd.service"
+
+[[logs]]
+label = "auth.log"
+path = "/var/log/auth.log"
