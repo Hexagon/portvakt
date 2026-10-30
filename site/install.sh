@@ -355,7 +355,7 @@ do_install() {
         127.*|localhost*|\[::1\]*)
             say "It only listens locally. From your machine: ssh -L 8443:${BIND} <this-server>, then open ${SCHEME}://localhost:8443" ;;
     esac
-    say "Security guide: https://hexagon.github.io/portvakt/security.html"
+    say "Security guide: https://hexagon.github.io/portvakt/docs/security.html"
 }
 
 case "$CMD" in

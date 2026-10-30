@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>portvakt — secure web admin for Linux servers</title>
+<meta name="description" content="portvakt is a secure, plugin-driven web admin for Linux servers with a VS Code-style interface. Auto-detects installed software; plugins are plain TOML.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<meta property="og:title" content="portvakt — secure web admin for Linux servers">
+<meta property="og:description" content="Auto-detects what's installed, manages it through plugins, built to be exposed to the internet.">
+<meta property="og:image" content="img/overview.png">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="./"><img src="icon.svg" alt="">portvakt</a>
+    <nav class="links">
+      <a href="#features" class="hide-sm">Features</a>
+      <a href="#security" class="hide-sm">Security</a>
+      <a href="docs/plugins.html">Plugins</a>
+      <a href="docs/">Docs</a>
+      <a href="https://github.com/Hexagon/portvakt">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="wrap">
+      <h1>The gatekeeper<br>for <span>your server</span></h1>
+      <p class="lead">A secure web admin for Linux in a single Rust binary. It finds what's installed,
+        lets you manage it from a VS&nbsp;Code-style interface, and learns new programs from a few lines of TOML.</p>
+      <div class="install">
+        <code id="install-cmd">curl -fsSL https://hexagon.github.io/portvakt/install.sh | sudo sh</code>
+        <button type="button" data-copy="install-cmd">Copy</button>
+      </div>
+      <p class="sub">Static binaries for x86_64 and aarch64 · systemd service · update with <code>sh -s -- update</code></p>
+      <div class="cta">
+        <a class="btn" href="docs/">Get started</a>
+        <a class="btn ghost" href="docs/plugins.html">Write a plugin</a>
+      </div>
+      <img class="shot" src="img/app-nginx.png" alt="portvakt showing the nginx overview: service actions, configuration files, logs" width="1440" height="900">
+    </div>
+  </div>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="kicker">What it does</div>
+      <h2>Everything you SSH in for, in a browser tab</h2>
+      <p class="intro">portvakt scans the host, shows the applications it recognises and gives each one a
+        consistent set of controls. The interface is modelled on VS Code, so it feels familiar from the first click.</p>
+      <div class="grid">
+        <div class="card">
+          <svg viewBox="0 0 24 24"><path d="M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM21 21l-5-5"/></svg>
+          <h3>Auto-detection</h3>
+          <p>Binaries, systemd units, config paths, running processes and listening ports tell portvakt what's installed.</p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 13l2 2 4-4"/></svg>
+          <h3>Safe config editing</h3>
+          <p>Every save is backed up, validated with the program's own checker (<code>nginx -t</code>, <code>sshd -t</code>…) and rolled back if it fails.</p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 24 24"><path d="M7 4l12 8-12 8z"/></svg>
+          <h3>Services and actions</h3>
+          <p>Start, stop, reload, test configuration and any maintenance command a plugin defines, with output in the panel.</p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 24 24"><path d="M4 20V4M4 20h16M7 16l4-5 3 3 5-7"/></svg>
+          <h3>Monitor and task manager</h3>
+          <p>Live CPU, memory, network and disk charts. A process list that works on every distro, with terminate and kill.</p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM7 9l3 3-3 3M12 15h5"/></svg>
+          <h3>Terminal</h3>
+          <p>A real PTY in the bottom panel when you need it. One setting turns it off when you don't.</p>
+        </div>
+        <div class="card">
+          <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg>
+          <h3>Logs and audit trail</h3>
+          <p>Log files and journald per application. Every login, action and file change is recorded.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="alt" id="plugins">
+    <div class="wrap split">
+      <div>
+        <div class="kicker">Plugins</div>
+        <h2>Teach it any program in one file</h2>
+        <p class="intro">A plugin is a TOML manifest: how to detect the program, which commands it may run, which
+          files it may edit and how to check them. No code, nothing sent to the browser, validated before it loads.</p>
+        <ul class="checks">
+          <li><code>portvakt plugin new redis-server</code> drafts one from the live system</li>
+          <li>Tables from any command's JSON or column output, with row actions</li>
+          <li>Parameters are validated against strict patterns; commands never touch a shell</li>
+          <li>Rust plugins for the rest: the task manager and monitor are built that way</li>
+        </ul>
+        <p style="margin-top:20px"><a href="docs/plugins.html">Plugin reference →</a></p>
+      </div>
+<pre><code><span class="c"># plugins/redis.toml</span>
+id = "redis"
+name = "Redis"
+category = "Databases"
+icon = "database"
+
+[detect]
+any = [{ binary = "redis-server" },
+       { systemd_unit = "redis-server.service" }]
+
+[version]
+command = ["redis-server", "--version"]
+regex = 'v=(\S+)'
+
+[service]
+systemd = "redis-server.service"
+
+[[files]]
+path = "/etc/redis/redis.conf"
+after_save = "restart"
+
+[[logs]]
+label = "Journal"
+journal = "redis-server.service"</code></pre>
+    </div>
+  </section>
+
+  <section id="security">
+    <div class="wrap split flip">
+      <div>
+        <div class="kicker">Security first</div>
+        <h2>Built to face the internet</h2>
+        <p class="intro">An admin panel is a target. portvakt refuses unsafe setups instead of warning about them,
+          and keeps the attack surface small: one binary, no runtime, no third-party scripts.</p>
+        <ul class="checks">
+          <li>No TLS on a public address? It won't start.</li>
+          <li>Argon2id passwords, TOTP two-factor, per-IP and per-account lockout</li>
+          <li><code>HttpOnly</code> <code>SameSite=Strict</code> <code>__Host-</code> cookies, CSRF tokens and Origin checks</li>
+          <li>Strict Content-Security-Policy; every asset is embedded in the binary</li>
+          <li>argv-only execution with a fixed PATH, cleared environment and timeouts</li>
+          <li>Optional unprivileged mode with a generated sudoers allow-list</li>
+        </ul>
+        <p style="margin-top:20px"><a href="docs/security.html">Read the security model →</a></p>
+      </div>
+      <img src="img/editor-rollback.png" alt="A broken nginx configuration is rejected by nginx -t and automatically restored" loading="lazy" width="1440" height="900">
+    </div>
+  </section>
+
+  <section class="alt">
+    <div class="wrap">
+      <div class="kicker">Tour</div>
+      <h2>A closer look</h2>
+      <p class="intro">Command palette, tabs, a resizable panel, light and dark themes: it works the way your editor does.</p>
+      <div class="gallery">
+        <figure><img src="img/monitor.png" alt="System monitor with CPU, memory, swap, load, network and disk charts" loading="lazy" width="1440" height="900"><figcaption>System monitor: ten minutes of live metrics.</figcaption></figure>
+        <figure><img src="img/task-manager.png" alt="Task manager listing processes with CPU and memory usage" loading="lazy" width="1440" height="900"><figcaption>Task manager: sort, filter, terminate.</figcaption></figure>
+        <figure><img src="img/terminal.png" alt="Terminal panel below the editor" loading="lazy" width="1440" height="900"><figcaption>Terminal in the panel, <kbd>Ctrl</kbd>+<kbd>`</kbd>.</figcaption></figure>
+        <figure><img src="img/palette.png" alt="Command palette" loading="lazy" width="1440" height="900"><figcaption>Command palette, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>.</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="agents">
+    <div class="wrap split">
+      <div>
+        <div class="kicker">Agent-ready</div>
+        <h2>Let your coding agent add the next plugin</h2>
+        <p class="intro">The repository ships instructions written for AI coding agents: where things live, the rules
+          a plugin must follow, and how to verify one. Point your agent at a program and review the pull request.</p>
+        <ul class="checks">
+          <li><a href="docs/agents.html">AGENTS.md</a>: architecture, invariants, workflow</li>
+          <li><a href="docs/plugins.html">Plugin reference</a> with a review checklist</li>
+          <li>Plain-text copies for tools: <a href="raw/AGENTS.md">AGENTS.md</a>, <a href="raw/PLUGINS.md">PLUGINS.md</a>, <a href="raw/plugin-template.toml">template</a></li>
+        </ul>
+      </div>
+<pre><code><span class="c"># In a checkout of Hexagon/portvakt</span>
+&gt; Add a plugin for HAProxy. Follow AGENTS.md.
+
+cargo run -- plugin new haproxy &gt; plugins/haproxy.toml
+<span class="c"># …refines detection, adds `haproxy -c -f {file}`…</span>
+cargo run -- plugin validate --detect plugins/haproxy.toml
+ok   plugins/haproxy.toml (haproxy)
+     detected=true version=Some("2.8.5")
+cargo test
+test result: ok.</code></pre>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>portvakt — MIT licensed. <em>Portvakt</em> is Swedish for gatekeeper.</span>
+    <span><a href="docs/">Docs</a> · <a href="docs/security.html">Security</a> · <a href="https://github.com/Hexagon/portvakt/releases">Releases</a> · <a href="https://github.com/Hexagon/portvakt">GitHub</a></span>
+  </div>
+</footer>
+<script src="site.js"></script>
+</body>
+</html>

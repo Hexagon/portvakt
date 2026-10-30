@@ -6,6 +6,7 @@ on:
     paths:
       - "site/**"
       - "docs/**"
+      - "AGENTS.md"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -26,14 +27,11 @@ jobs:
 
       - uses: actions/configure-pages@v5
 
-      - name: Assemble site
-        run: |
-          set -eu
-          mkdir -p _site
-          cp -r site/. _site/
-          # Raw docs are published too, so agents can fetch them by URL.
-          mkdir -p _site/raw
-          cp docs/PLUGINS.md docs/SECURITY.md docs/plugin-template.toml AGENTS.md _site/raw/
+      - name: Install pandoc
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq pandoc
+
+      - name: Build site
+        run: sh site/_build/build.sh _site
 
       - uses: actions/upload-pages-artifact@v3
         with:

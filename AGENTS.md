@@ -77,8 +77,18 @@ cargo run -q -- -c /tmp/pv/portvakt.toml serve
 In debug builds the UI files in `web/` are read from disk, so UI edits only
 need a browser reload. Release builds embed them.
 
-UI smoke test (Playwright is preinstalled in many agent sandboxes):
-`node tests/e2e.mjs` against a running dev server (see the file header).
+UI end-to-end test (Playwright is preinstalled in many agent sandboxes), against a
+running dev server: `PV_PASS=dev-password-123 node tests/e2e.mjs`. It covers login,
+CSRF, file editing with validation rollback (if nginx is installed), task manager,
+monitor, terminal, audit log and the palette. Five failed logins lock the account
+for 15 minutes (that's the rate limiter working) — restart the dev server to reset.
+
+Website: `sh site/_build/build.sh /tmp/site` (needs pandoc) builds `site/` + `docs/*.md`
+into a static site; `.github/workflows/pages.yml` publishes it on push to main.
+
+Release: bump `version` in `Cargo.toml`, commit, then push a tag `vX.Y.Z`.
+`.github/workflows/release.yml` builds static musl binaries (x86_64, aarch64) and
+publishes them with checksums; `site/install.sh` downloads from the latest release.
 
 ## Security invariants (do not weaken)
 

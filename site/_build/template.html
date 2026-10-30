@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$pagetitle$ — portvakt</title>
+<link rel="icon" href="../icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="logo" href="../"><img src="../icon.svg" alt="">portvakt</a>
+    <nav class="links">
+      <a href="./">Docs</a>
+      <a href="plugins.html">Plugins</a>
+      <a href="security.html">Security</a>
+      <a href="https://github.com/Hexagon/portvakt">GitHub</a>
+    </nav>
+  </div>
+</header>
+<div class="wrap doc">
+  <aside>
+    <h4>Documentation</h4>
+    <ul>
+      <li><a href="./" $if(nav-start)$aria-current="page"$endif$>Getting started</a></li>
+      <li><a href="plugins.html" $if(nav-plugins)$aria-current="page"$endif$>Writing plugins</a></li>
+      <li><a href="security.html" $if(nav-security)$aria-current="page"$endif$>Security model</a></li>
+      <li><a href="agents.html" $if(nav-agents)$aria-current="page"$endif$>For coding agents</a></li>
+    </ul>
+    $if(toc)$<h4>On this page</h4>
+    $table-of-contents$$endif$
+  </aside>
+  <article class="md">
+$body$
+  <p style="margin-top:48px;font-size:14px"><a href="https://github.com/Hexagon/portvakt/edit/main/$source$">Edit this page on GitHub</a></p>
+  </article>
+</div>
+<footer><div class="wrap"><span>portvakt — MIT licensed.</span><span><a href="../">Home</a> · <a href="https://github.com/Hexagon/portvakt">GitHub</a></span></div></footer>
+</body>
+</html>
