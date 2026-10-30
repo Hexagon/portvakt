@@ -304,17 +304,22 @@ async fn session(State(st): State<Shared>, a: Authed) -> Response {
 // Apps
 // ---------------------------------------------------------------------------
 
-async fn list_apps(State(st): State<Shared>, _a: Authed) -> Response {
-    let mut out = Vec::new();
-    for p in &st.registry.plugins {
-        let m = &p.manifest;
-        let d = st.registry.detection(&m.id).await;
-        out.push(json!({
-            "id": m.id, "name": m.name, "description": m.description, "category": m.category,
-            "icon": m.icon, "detected": d.detected, "version": d.version, "has_service": m.service.is_some(),
-        }));
-    }
-    Json(out).into_response()
+async fn list_apps(State(st): State<Shared>, a: Authed) -> Response {
+    let admin = a.session.role == Role::Admin;
+    let futs = st.registry.plugins.iter().map(|p| {
+        let st = st.clone();
+        async move {
+            let m = &p.manifest;
+            let d = st.registry.detection(&m.id).await;
+            let state = if d.detected { runtime::service_status(m).await.map(|s| s.active) } else { None };
+            json!({
+                "id": m.id, "name": m.name, "description": m.description, "category": m.category,
+                "icon": m.icon, "detected": d.detected, "version": d.version, "state": state,
+                "views": if admin && d.detected { serde_json::to_value(runtime::views(m)).unwrap() } else { json!([]) },
+            })
+        }
+    });
+    Json(futures_util::future::join_all(futs).await).into_response()
 }
 
 async fn app_detail(State(st): State<Shared>, a: Authed, Path(id): Path<String>) -> Response {

@@ -397,6 +397,7 @@ pub struct ViewView {
     pub kind: ViewKind,
     pub location: ViewLocation,
     pub refresh: u64,
+    pub activity: bool,
     pub key: Option<String>,
     pub columns: Vec<Column>,
     pub row_actions: Vec<RowActionView>,
@@ -419,6 +420,7 @@ pub fn views(m: &Manifest) -> Vec<ViewView> {
             kind: v.kind,
             location: v.location,
             refresh: v.refresh,
+            activity: v.activity,
             key: v.key.clone(),
             columns: v.columns.clone(),
             row_actions: v

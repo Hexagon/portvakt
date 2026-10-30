@@ -184,6 +184,9 @@ pub struct View {
     /// Auto-refresh interval in seconds; 0 = manual.
     #[serde(default)]
     pub refresh: u64,
+    /// Show a shortcut for this view in the activity bar (left edge).
+    #[serde(default)]
+    pub activity: bool,
     /// Declarative table data source. Omit only in native plugins (Rust provides the data).
     pub command: Option<Vec<String>>,
     #[serde(default)]

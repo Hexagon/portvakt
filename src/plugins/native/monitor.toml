@@ -13,3 +13,4 @@ id = "monitor"
 label = "Monitor"
 type = "metrics"
 refresh = 2
+activity = true
