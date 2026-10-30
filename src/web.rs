@@ -180,12 +180,11 @@ where
         let session = st.auth.session(&token).ok_or_else(|| err(StatusCode::UNAUTHORIZED, "session expired"))?;
         let safe = matches!(parts.method, Method::GET | Method::HEAD);
         let is_ws = parts.headers.get(header::UPGRADE).is_some();
-        if !safe || is_ws {
-            if !origin_ok(&st.cfg, &parts.headers) {
+        if (!safe || is_ws)
+            && !origin_ok(&st.cfg, &parts.headers) {
                 st.audit.log(&session.user, ip, "csrf.origin", parts.uri.path(), false);
                 return Err(err(StatusCode::FORBIDDEN, "bad origin"));
             }
-        }
         if !safe {
             let sent = parts.headers.get(auth::CSRF_HEADER).and_then(|v| v.to_str().ok()).unwrap_or("");
             if !bool::from(subtle::ConstantTimeEq::ct_eq(sent.as_bytes(), session.csrf.as_bytes())) {

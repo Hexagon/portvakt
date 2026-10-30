@@ -106,7 +106,7 @@ pub fn load_all(dirs: &[PathBuf], disabled: &[String]) -> Result<(Vec<Plugin>, V
         }
     }
     let mut plugins: Vec<Plugin> = map.into_values().filter(|p| !disabled.contains(&p.manifest.id)).collect();
-    plugins.sort_by(|a, b| a.manifest.name.to_lowercase().cmp(&b.manifest.name.to_lowercase()));
+    plugins.sort_by_key(|a| a.manifest.name.to_lowercase());
     Ok((plugins, errors))
 }
 

@@ -194,11 +194,10 @@ impl Config {
         if s.behind_proxy && s.trusted_proxies.is_empty() {
             bail!("server.behind_proxy requires server.trusted_proxies");
         }
-        if let Some(o) = &s.public_origin {
-            if o.ends_with('/') || !(o.starts_with("https://") || o.starts_with("http://")) {
+        if let Some(o) = &s.public_origin
+            && (o.ends_with('/') || !(o.starts_with("https://") || o.starts_with("http://"))) {
                 bail!("server.public_origin must look like https://host[:port] (no trailing slash)");
             }
-        }
         if !self.terminal.shell.is_absolute() {
             bail!("terminal.shell must be an absolute path");
         }

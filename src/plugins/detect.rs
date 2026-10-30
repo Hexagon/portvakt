@@ -74,9 +74,9 @@ pub async fn detect(m: &Manifest) -> Detection {
         }
     }
     d.detected = any_ok && all_ok;
-    if d.detected {
-        if let Some(v) = &m.version {
-            if let Ok(argv) = exec::prepare(&v.command, false, false) {
+    if d.detected
+        && let Some(v) = &m.version
+            && let Ok(argv) = exec::prepare(&v.command, false, false) {
                 let out = exec::run(argv, DETECT_TIMEOUT).await;
                 // Many tools print versions on stderr and some exit non-zero for --version.
                 let text = format!("{}\n{}", out.stdout, out.stderr);
@@ -84,8 +84,6 @@ pub async fn detect(m: &Manifest) -> Detection {
                     d.version = re.captures(&text).and_then(|c| c.get(1)).map(|m| m.as_str().trim().to_string());
                 }
             }
-        }
-    }
     d
 }
 

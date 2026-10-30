@@ -345,24 +345,21 @@ impl DetectRule {
         if self.regex.is_some() && self.command.is_none() {
             bail!("detect rule: `regex` only applies to `command`");
         }
-        if let Some(b) = &self.binary {
-            if b.is_empty() || (b.contains('/') && !b.starts_with('/')) {
+        if let Some(b) = &self.binary
+            && (b.is_empty() || (b.contains('/') && !b.starts_with('/'))) {
                 bail!("detect binary must be a bare name or absolute path: {b:?}");
             }
-        }
         if let Some(p) = &self.path {
             check_path("detect path", p)?;
         }
-        if let Some(u) = &self.systemd_unit {
-            if !unit_re().is_match(u) {
+        if let Some(u) = &self.systemd_unit
+            && !unit_re().is_match(u) {
                 bail!("detect systemd_unit looks invalid: {u:?}");
             }
-        }
-        if let Some(p) = &self.process {
-            if p.is_empty() || p.len() > 15 || p.contains('/') {
+        if let Some(p) = &self.process
+            && (p.is_empty() || p.len() > 15 || p.contains('/')) {
                 bail!("detect process must be a comm name (max 15 chars): {p:?}");
             }
-        }
         if let Some(c) = &self.command {
             check_argv("detect command", c, &HashSet::new())?;
         }
@@ -429,6 +426,7 @@ impl Manifest {
                 Regex::new(r).context("info regex")?;
             }
         }
+        let param_re = Regex::new(r"^[a-z_][a-z0-9_]*$").unwrap();
         for a in &self.actions {
             if !id_re().is_match(&a.id) {
                 bail!("action id {:?} must match [a-z0-9][a-z0-9-]*", a.id);
@@ -441,7 +439,7 @@ impl Manifest {
             }
             let mut names = HashSet::new();
             for p in &a.params {
-                if !Regex::new(r"^[a-z_][a-z0-9_]*$").unwrap().is_match(&p.name) {
+                if !param_re.is_match(&p.name) {
                     bail!("action {:?}: bad param name {:?}", a.id, p.name);
                 }
                 if p.name == "file" {
@@ -451,11 +449,10 @@ impl Manifest {
                     bail!("action {:?}: duplicate param {:?}", a.id, p.name);
                 }
                 let re = anchored(&p.pattern)?;
-                if let Some(d) = &p.default {
-                    if !re.is_match(d) {
+                if let Some(d) = &p.default
+                    && !re.is_match(d) {
                         bail!("action {:?}: default for {:?} does not match its pattern", a.id, p.name);
                     }
-                }
             }
             check_argv(&format!("action {:?}", a.id), &a.command, &names)?;
         }

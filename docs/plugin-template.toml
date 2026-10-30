@@ -1,0 +1,62 @@
+# Template for a declarative portvakt plugin. Copy to plugins/<id>.toml.
+# Reference: docs/PLUGINS.md. Delete every section you don't need.
+
+id = "example"                       # [a-z0-9-]+, must equal the file name
+name = "Example"
+description = "One line describing the program."
+category = "Other"                   # System, Web servers, Databases, Containers, Security, Monitoring, Mail, Other
+icon = "app"                         # app globe database server box lock terminal pulse graph shield cog file log table bolt
+
+[detect]
+any = [
+  { binary = "example" },
+  { systemd_unit = "example.service" },
+  { path = "/etc/example" },
+]
+
+[version]
+command = ["example", "--version"]
+regex = 'example (\S+)'
+
+[service]
+systemd = "example.service"
+actions = ["start", "stop", "restart", "reload"]
+
+[[info]]
+label = "Status"
+command = ["example", "status"]
+
+[[actions]]
+id = "check"
+label = "Check configuration"
+command = ["example", "check-config"]
+privileged = true
+
+[[actions]]
+id = "flush"
+label = "Flush cache"
+command = ["example", "flush", "{scope}"]
+privileged = true
+confirm = true
+params = [{ name = "scope", label = "Scope", pattern = "all|sessions|pages", default = "pages" }]
+
+[[files]]
+path = "/etc/example/example.conf"
+language = "ini"
+validate = ["example", "check-config", "--file", "{file}"]
+validate_privileged = true
+after_save = "reload"
+
+[[logs]]
+label = "Journal"
+journal = "example.service"
+
+[[views]]
+id = "items"
+label = "Items"
+type = "table"
+refresh = 10
+command = ["example", "list", "--json"]
+format = "json"
+key = "id"
+columns = [{ key = "id", label = "Id" }, { key = "state", label = "State", format = "status" }]
