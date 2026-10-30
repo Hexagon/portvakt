@@ -216,6 +216,17 @@ impl Auth {
         Some(s.clone())
     }
 
+    /// Like `session` but does not count as activity (used by background checks).
+    pub fn session_peek(&self, token: &str) -> Option<Session> {
+        let map = self.sessions.lock().unwrap();
+        let now = Instant::now();
+        let s = map.get(&token_key(token))?;
+        if now.duration_since(s.last_seen) > self.idle || now.duration_since(s.created) > self.absolute {
+            return None;
+        }
+        Some(s.clone())
+    }
+
     pub fn logout(&self, token: &str) {
         self.sessions.lock().unwrap().remove(&token_key(token));
     }
